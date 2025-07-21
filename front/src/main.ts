@@ -9,13 +9,21 @@ import 'vuetify/styles'
 import { createVuetify } from 'vuetify'
 import * as components from 'vuetify/components'
 import * as directives from 'vuetify/directives'
+import {
+  VStepperVertical,
+  VStepperVerticalItem
+} from 'vuetify/labs/VStepperVertical'
 
 import '@mdi/font/css/materialdesignicons.css'
 
 import App from './App.vue'
 
 const vuetify = createVuetify({
-  components,
+  components: {
+    ...components,
+    VStepperVertical,
+    VStepperVerticalItem
+  },
   directives
 })
 

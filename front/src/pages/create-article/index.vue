@@ -1,14 +1,16 @@
 <template>
   <div class="container mx-auto mt-10">
-    <v-stepper :items="steps" :model-value="currentStep">
-      <template v-slot:item.1 :editable="latestStep >= 0">
+    <v-stepper :items="steps" v-model="currentStep">
+      <template v-slot:item.1>
         <v-card flat>
-          <CreateOutline :completed="completed[0]" />
+          <fill-info />
         </v-card>
       </template>
 
-      <template v-slot:item.2 :editable="latestStep >= 1">
-        <v-card title="Step Two" flat>...</v-card>
+      <template v-slot:item.2>
+        <v-card flat>
+          <define-structure />
+        </v-card>
       </template>
 
       <template v-slot:item.3>
@@ -19,27 +21,38 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue'
-import CreateOutline from './CreateOutline.vue'
+import { onMounted, ref } from 'vue'
+import { useStore } from 'vuex'
+import { key } from '@/store'
+import FillInfo from './FillInfo.vue'
+import DefineStructure from './DefineStructure.vue'
+
+const store = useStore(key)
+
+onMounted(() => {
+  store.dispatch('outline/restoreFromLocalStorage')
+  store.dispatch('structure/restoreFromLocalStorage')
+})
+
 const steps = ['Fill Info', 'Define Structure', 'Complete Content', 'Review']
-const completed = ref({
-  0: false,
-  1: false,
-  2: false,
-  3: false
-})
-const latestStep = computed(() => {
-  return Object.keys(completed).reduce((max, key) => {
-    return completed[key as unknown as keyof typeof completed]
-      ? Math.max(max, Number(key) + 1)
-      : max
-  }, 0)
-})
+// const completed = ref({
+//   0: false,
+//   1: false,
+//   2: false,
+//   3: false
+// })
+// const latestStep = computed(() => {
+//   return Object.keys(completed).reduce((max, key) => {
+//     return completed[key as unknown as keyof typeof completed]
+//       ? Math.max(max, Number(key) + 1)
+//       : max
+//   }, 0)
+// })
 const currentStep = ref(1)
 </script>
 
 <style scoped>
 .container {
-  max-width: 80%;
+  max-width: 90%;
 }
 </style>
