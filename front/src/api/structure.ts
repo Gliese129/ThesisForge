@@ -1,6 +1,6 @@
 import axios from './config'
 
-const baseUrl = '/article/structure'
+const baseUrl = '/article'
 
 interface Prompt {
   prompt: string
@@ -8,12 +8,13 @@ interface Prompt {
 
 interface Response {
   sections: {
-    id: number
     title: string
     description: string
     expectedWordCount?: number
+    note?: string
   }[]
-  summary: string
+  qaSummary: string
+  completed: boolean
 }
 
 const GenerateStructureApi = {
@@ -24,10 +25,13 @@ const GenerateStructureApi = {
         ([_, value]) => value !== undefined && value !== null && value !== ''
       )
     )
-    return await axios.post(`${baseUrl}/generate/get-prompt`, filteredData)
+    return await axios.post(
+      `${baseUrl}/generate-structure/get-prompt`,
+      filteredData
+    )
   },
   updateManually: async (data: string): Promise<Response> => {
-    return await axios.post(`${baseUrl}/generate/manual`, {
+    return await axios.post(`${baseUrl}/generate-structure/manual`, {
       text: data
     })
   },
@@ -38,8 +42,38 @@ const GenerateStructureApi = {
         ([_, value]) => value !== undefined && value !== null && value !== ''
       )
     )
-    return await axios.post(`${baseUrl}/generate`, filteredData)
+    return await axios.post(`${baseUrl}/generate-structure`, filteredData)
   }
 }
 
-export { GenerateStructureApi }
+const UpdateStructureApi = {
+  getPrompt: async (data: any): Promise<Prompt> => {
+    // filter out undefined values
+    const filteredData = Object.fromEntries(
+      Object.entries(data).filter(
+        ([_, value]) => value !== undefined && value !== null && value !== ''
+      )
+    )
+
+    return await axios.post(
+      `${baseUrl}/update-structure/get-prompt`,
+      filteredData
+    )
+  },
+  updateManually: async (data: string): Promise<Response> => {
+    return await axios.post(`${baseUrl}/update-structure/manual`, {
+      text: data
+    })
+  },
+  update: async (data: any): Promise<Response> => {
+    // filter out undefined values
+    const filteredData = Object.fromEntries(
+      Object.entries(data).filter(
+        ([_, value]) => value !== undefined && value !== null && value !== ''
+      )
+    )
+    return await axios.post(`${baseUrl}/update-structure`, filteredData)
+  }
+}
+
+export { GenerateStructureApi, UpdateStructureApi }

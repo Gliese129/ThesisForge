@@ -1,19 +1,25 @@
 <template>
   <v-form>
     <v-row>
-      <!-- Left panel: vertical tabs + content -->
-      <v-col cols="12" md="6">
-        <v-card class="px-4 py-6 h-[65vh] overflow-auto">
-          <v-tabs vertical v-model="activeTab" class="mb-6">
+      <v-col cols="12" md="7">
+        <v-card class="pa-4 fill-height d-flex flex-column">
+          <v-card-title class="text-h5"
+            >Step 1: Define Your Article Outline</v-card-title
+          >
+          <v-card-subtitle
+            >Fill in the details below to create a prompt for the
+            AI.</v-card-subtitle
+          >
+
+          <v-tabs v-model="activeTab" color="primary" class="mb-4">
             <v-tab value="basic">Basic Info</v-tab>
-            <v-tab value="extra">Extra Info</v-tab>
+            <v-tab value="extra">Style & Focus</v-tab>
             <v-tab value="questions">Additional Questions</v-tab>
           </v-tabs>
 
-          <v-tabs-window v-model="activeTab">
-            <!-- Basic Info -->
-            <v-tabs-window-item value="basic">
-              <v-card flat>
+          <div class="flex-grow-1 overflow-y-auto">
+            <v-tabs-window v-model="activeTab">
+              <v-tabs-window-item value="basic">
                 <v-card-text class="space-y-4">
                   <v-text-field clearable label="Title" v-model="title" />
                   <v-text-field
@@ -24,7 +30,7 @@
                   <v-text-field clearable label="Purpose" v-model="purpose" />
                   <v-text-field
                     clearable
-                    label="Target Audience (Optional)"
+                    label="Target Audience"
                     v-model="targetAudience"
                   />
                   <v-text-field clearable label="Language" v-model="language" />
@@ -32,28 +38,24 @@
                   <div class="flex items-center space-x-4">
                     <v-switch
                       v-model="hasWordCount"
-                      label="Word Count"
+                      label="Specify Word Count"
                       color="primary"
                     />
                     <div v-if="hasWordCount" class="flex space-x-4">
                       <v-number-input
-                        label="Min Count"
-                        type="number"
+                        label="Min"
                         v-model="minWordCount"
                         :min="0"
                         :max="maxWordCount || Infinity"
                         :step="100"
                         density="compact"
-                        outlined
                       />
                       <v-number-input
-                        label="Max Count"
-                        type="number"
+                        label="Max"
                         v-model="maxWordCount"
                         :min="minWordCount || 0"
                         :step="100"
                         density="compact"
-                        outlined
                       />
                     </div>
                   </div>
@@ -71,12 +73,9 @@
                     />
                   </div>
                 </v-card-text>
-              </v-card>
-            </v-tabs-window-item>
+              </v-tabs-window-item>
 
-            <!-- Extra Info -->
-            <v-tabs-window-item value="extra">
-              <v-card flat>
+              <v-tabs-window-item value="extra">
                 <v-card-text class="space-y-4">
                   <v-text-field
                     label="Preferred Tone"
@@ -87,8 +86,6 @@
                   <v-textarea
                     label="Existing Notes"
                     v-model="existingNotes"
-                    multiple
-                    chips
                     rows="3"
                   />
                   <v-switch
@@ -97,20 +94,27 @@
                     color="primary"
                   />
                 </v-card-text>
-              </v-card>
-            </v-tabs-window-item>
+              </v-tabs-window-item>
 
-            <!-- Additional Questions -->
-            <v-tabs-window-item value="questions">
-              <v-card flat>
+              <v-tabs-window-item value="questions">
                 <v-card-text class="space-y-6">
+                  <div
+                    v-if="!additionalQuestions?.length"
+                    class="text-center text-grey"
+                  >
+                    No additional questions yet.
+                  </div>
                   <div
                     v-for="(q, i) in additionalQuestions"
                     :key="i"
                     class="space-y-2"
                   >
                     <div class="font-medium">Q: {{ q.question }}</div>
-                    <v-textarea label="Answer" v-model="q.answer" rows="2" />
+                    <v-textarea
+                      label="Your Answer"
+                      v-model="q.answer"
+                      rows="2"
+                    />
                     <v-btn
                       color="warning"
                       variant="outlined"
@@ -121,284 +125,302 @@
                     </v-btn>
                   </div>
                 </v-card-text>
-              </v-card>
-            </v-tabs-window-item>
-          </v-tabs-window>
-        </v-card>
-      </v-col>
+              </v-tabs-window-item>
+            </v-tabs-window>
+          </div>
 
-      <v-divider vertical />
+          <v-divider class="my-4"></v-divider>
 
-      <!-- Right panel: actions & suggestions -->
-      <v-col cols="12" md="6">
-        <v-card
-          class="px-4 py-6 h-[65vh] flex flex-col overflow-auto"
-          title="Update Info"
-        >
-          <!-- Outline actions -->
-          <div class="flex flex-wrap gap-4 mb-6 justify-center">
-            <v-btn color="primary" @click="copyOutlinePromptToClipboard">
+          <v-card-actions class="flex-wrap justify-center gap-4">
+            <v-btn
+              prepend-icon="mdi-content-copy"
+              @click="copyPrompt(ArticleOutlineApi.getPrompt)"
+            >
               Get Prompt
             </v-btn>
-            <paste-ai-response @send="updateOutlineManually" />
+            <paste-ai-response
+              @send="
+                (text) =>
+                  handleOutlineUpdate(ArticleOutlineApi.updateManually(text))
+              "
+            />
             <v-btn
-              color="secondary"
+              color="primary"
+              prepend-icon="mdi-robot"
               :loading="outlineAskBtnLoading"
-              @click="updateOutline"
+              @click="handleOutlineUpdate(ArticleOutlineApi.update(article))"
             >
               Ask AI
             </v-btn>
-          </div>
+          </v-card-actions>
+        </v-card>
+      </v-col>
 
-          <v-alert v-if="completed" type="success" dense class="mt-3">
-            Outline confirmed! You can move to the next step.
-          </v-alert>
-
-          <!-- Generate Structure -->
-          <v-card v-if="completed" flat class="mb-6" title="Generate Structure">
-            <v-card-text class="flex flex-wrap gap-4 justify-center">
-              <v-btn color="primary" @click="copyStructurePromptToClipboard">
-                Get Prompt
-              </v-btn>
-              <paste-ai-response @send="generateStructureManually" />
-              <v-btn
-                color="secondary"
-                :loading="structureAskBtnLoading"
-                @click="generateStructure"
-              >
-                Ask AI
-              </v-btn>
-            </v-card-text>
-          </v-card>
-
-          <!-- Suggestions list -->
-          <div class="overflow-auto flex-1 space-y-4">
-            <v-card
-              v-for="s in suggestions"
-              :key="s.field"
-              flat
-              class="p-4 border rounded"
+      <v-col cols="12" md="5">
+        <v-card class="pa-4 fill-height d-flex flex-column">
+          <v-card-title class="text-h5">AI Suggestions</v-card-title>
+          <v-card-subtitle
+            >AI may suggest improvements for your outline here.</v-card-subtitle
+          >
+          <div class="flex-grow-1 overflow-y-auto pt-4 space-y-4">
+            <div
+              v-if="!suggestions.length"
+              class="text-center text-grey d-flex align-center justify-center h-100"
             >
-              <div class="flex justify-between items-center mb-2">
-                <span class="font-medium">{{ s.name }}</span>
-                <div class="flex space-x-2">
-                  <v-btn
-                    color="primary"
-                    size="small"
-                    @click="outline[s.field] = s.to"
-                  >
-                    Apply
-                  </v-btn>
-                  <v-btn
-                    color="error"
-                    size="small"
-                    @click="removeSuggestion(s.field)"
-                  >
-                    Discard
-                  </v-btn>
-                </div>
-              </div>
-              <div class="flex items-center space-x-2">
-                <v-chip small>{{ s.from }}</v-chip>
-                <v-text-field
-                  v-model="s.to"
-                  clearable
-                  dense
-                  hide-details
-                  placeholder="Edit suggestion"
-                  @input="outline[s.field] = s.to"
-                />
-              </div>
+              No suggestions at the moment.
+            </div>
+            <v-card v-for="s in suggestions" :key="s.field" variant="outlined">
+              <v-card-title class="text-body-1"
+                >Suggestion for "{{ s.name }}"</v-card-title
+              >
+              <v-card-text>
+                <v-chip size="small" color="secondary" class="mb-2"
+                  >From: {{ s.from }}</v-chip
+                >
+                <v-text-field v-model="s.to" clearable dense label="To" />
+              </v-card-text>
+              <v-card-actions class="justify-end">
+                <v-btn size="small" @click="removeSuggestion(s.field)"
+                  >Discard</v-btn
+                >
+                <v-btn
+                  size="small"
+                  color="primary"
+                  @click="applySuggestion(s.field, s.to)"
+                  >Apply</v-btn
+                >
+              </v-card-actions>
             </v-card>
           </div>
         </v-card>
+      </v-col>
+    </v-row>
+
+    <v-row v-if="completed">
+      <v-col>
+        <v-fade-transition>
+          <v-card class="mt-6">
+            <v-card-title class="text-h5">
+              Step 2: Generate Article Structure
+            </v-card-title>
+            <v-card-subtitle>
+              Your outline is confirmed! Now, let's generate the article
+              structure.
+            </v-card-subtitle>
+            <v-card-text
+              class="d-flex flex-wrap justify-center align-center gap-4 pa-6"
+            >
+              <v-btn
+                prepend-icon="mdi-content-copy"
+                @click="copyPrompt(GenerateStructureApi.getPrompt)"
+                >Get Prompt</v-btn
+              >
+              <paste-ai-response
+                @send="
+                  (text) =>
+                    handleStructureGeneration(
+                      GenerateStructureApi.updateManually(text)
+                    )
+                "
+              />
+              <v-btn
+                color="primary"
+                prepend-icon="mdi-robot"
+                :loading="structureAskBtnLoading"
+                @click="
+                  handleStructureGeneration(
+                    GenerateStructureApi.update(article)
+                  )
+                "
+                >Ask AI & Proceed</v-btn
+              >
+            </v-card-text>
+          </v-card>
+        </v-fade-transition>
       </v-col>
     </v-row>
   </v-form>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { useStore } from 'vuex'
 import { key } from '@/store'
+import { type ArticleState } from '@/store/article' // Use the new unified article store
 import ArticleOutlineApi from '@/api/outline'
 import { GenerateStructureApi } from '@/api/structure'
 // @ts-ignore-next-line
 import PasteAiResponse from '@/components/PasteAIResponse.vue'
-import type { ArticleOutlineState } from '@/store/outline'
 
-// Use Vuetify + Tailwind utility classes, minimal custom CSS
-
-// Tabs state
-const activeTab = ref<'basic' | 'extra' | 'questions'>('basic')
-
-// Vuex outline state
-const store = useStore(key)
 onMounted(() => {
   document.title = 'Create Article - Fill Info'
 })
+const emit = defineEmits(['completed'])
 
-function useOutlineField<K extends keyof ArticleOutlineState>(k: K) {
+// --- Vuex State & Helpers ---
+const store = useStore(key)
+const completed = defineModel<boolean>('completed', { default: false })
+
+// A generic helper to create computed properties linked to the article state
+function useArticleField<K extends keyof ArticleState>(k: K) {
   return computed({
-    get: () => store.state.outline[k],
-    set: (v) => store.commit('outline/setState', { [k]: v })
+    get: () => store.state.article[k],
+    set: (v) => store.commit('article/setState', { [k]: v })
   })
 }
 
-const title = useOutlineField('title')
-const subjectArea = useOutlineField('subjectArea')
-const purpose = useOutlineField('purpose')
-const targetAudience = useOutlineField('targetAudience')
-const language = useOutlineField('language')
-const minWordCount = useOutlineField('minWordCount')
-const maxWordCount = useOutlineField('maxWordCount')
-const requireReferences = useOutlineField('requireReferences')
-const includeFormulas = useOutlineField('includeFormulas')
-const preferredTone = useOutlineField('preferredTone')
-const focusArea = useOutlineField('focusArea')
-const avoidTopics = useOutlineField('avoidTopics')
-const existingNotes = useOutlineField('existingNotes')
-const needAbstract = useOutlineField('needAbstract')
-const additionalQuestions = useOutlineField('additionalQuestions')
+// All form fields now point to the single 'article' state
+const title = useArticleField('title')
+const subjectArea = useArticleField('subjectArea')
+const purpose = useArticleField('purpose')
+const targetAudience = useArticleField('targetAudience')
+const language = useArticleField('language')
+const minWordCount = useArticleField('minWordCount')
+const maxWordCount = useArticleField('maxWordCount')
+const requireReferences = useArticleField('requireReferences')
+const includeFormulas = useArticleField('includeFormulas')
+const preferredTone = useArticleField('preferredTone')
+const focusArea = useArticleField('focusArea')
+const avoidTopics = useArticleField('avoidTopics')
+const existingNotes = useArticleField('existingNotes')
+const needAbstract = useArticleField('needAbstract')
+const additionalQuestions = useArticleField('additionalQuestions')
 
-const outline = computed<ArticleOutlineState>(() => store.state.outline)
-const completed = defineModel('completed', { type: Boolean, default: false })
+const article = computed<ArticleState>(() => store.state.article)
 
-const removeQuestion = (q: string) => {
-  store.commit('outline/removeQuestion', q)
-  return true
-}
-
-const hasWordCount = ref(false)
-watch(
-  hasWordCount,
-  (nv) => {
-    if (!nv) {
-      minWordCount.value = undefined
-      maxWordCount.value = undefined
-    }
-  },
-  { immediate: true }
-)
-
+// --- Local Component State ---
+const activeTab = ref<'basic' | 'extra' | 'questions'>('basic')
+const hasWordCount = ref(!!(minWordCount.value || maxWordCount.value))
 const suggestions = ref<any[]>([])
+const outlineAskBtnLoading = ref(false)
+const structureAskBtnLoading = ref(false)
+
+// --- Logic for Word Count Switch ---
+watch(hasWordCount, (isToggled) => {
+  if (!isToggled) {
+    minWordCount.value = undefined
+    maxWordCount.value = undefined
+  }
+})
+
+// --- Logic for Suggestions ---
+const applySuggestion = (field: keyof ArticleState, value: any) => {
+  store.commit('article/setState', { [field]: value })
+  removeSuggestion(field)
+}
 const removeSuggestion = (field: string) => {
   suggestions.value = suggestions.value.filter((i) => i.field !== field)
-  return true
 }
 
-const copyOutlinePromptToClipboard = async () => {
-  const data = await ArticleOutlineApi.getPrompt(outline.value)
-  const prompt = data.prompt || ''
+// --- Logic for Additional Questions ---
+const removeQuestion = (q: string) => {
+  store.commit('article/removeQuestion', q)
+}
+
+// --- Reusable API Handlers ---
+
+/**
+ * Copies a prompt from a given API endpoint to the clipboard.
+ * @param apiFn The API function that returns a prompt.
+ */
+const copyPrompt = async (
+  apiFn: (payload: ArticleState) => Promise<{ prompt: string }>
+) => {
   try {
-    await navigator.clipboard.writeText(prompt)
-    store.commit('message/success', 'Prompt copied')
+    const data = await apiFn(article.value)
+    await navigator.clipboard.writeText(data.prompt || '')
+    store.commit('message/success', 'Prompt copied to clipboard!')
   } catch {
-    store.commit('message/error', 'Failed to copy')
+    store.commit('message/error', 'Failed to copy prompt.')
   }
 }
 
-const updateOutlineManually = async (text: string) => {
-  if (text === 'complete') {
-    store.commit('message/warning', 'Debug only')
-    completed.value = true
+/**
+ * Processes the list of suggestions from an API response.
+ * @param suggs The suggestions array from the API.
+ */
+const handleSuggestionProcessing = (suggs: any[]) => {
+  if (!suggs || !suggs.length) {
+    suggestions.value = []
     return
   }
-  if (text) {
-    const res = await ArticleOutlineApi.updateManually(text)
-    const addQs = res.additionalQuestions || []
-    const comp = res.completed || false
-    const suggs = res.suggestions || []
-    if (addQs.length) {
-      store.commit('outline/addQuestions', addQs)
-      store.commit('message/info', `Added ${addQs.length} questions`)
-    }
-    completed.value = comp
-    suggestions.value = suggs
-      .filter((i: any) => i[0] && i[1])
-      .filter((i: any) => outline.value[i[0]] != null)
-      .map((i: any) => ({
-        field: i[0],
-        name: i[0][0].toUpperCase() + i[0].slice(1),
-        from: (outline.value as any)[i[0]],
-        to: i[1]
-      }))
-  }
-}
-
-const outlineAskBtnLoading = ref(false)
-const updateOutline = async () => {
-  outlineAskBtnLoading.value = true
-  const res = await ArticleOutlineApi.update(outline.value)
-  const addQs = res.additionalQuestions || []
-  const comp = res.completed || false
-  const suggs = res.suggestions || []
-  if (addQs.length) {
-    store.commit('outline/addQuestions', addQs)
-    store.commit('message/info', `Added ${addQs.length} questions`)
-  }
-  outlineAskBtnLoading.value = false
-  completed.value = comp
   suggestions.value = suggs
-    .filter((i: any) => i[0] && i[1])
-    .filter((i: any) => outline.value[i[0]] != null)
+    .filter(
+      (i: any) =>
+        i &&
+        i[0] &&
+        i[1] !== undefined &&
+        article.value[i[0] as keyof ArticleState] !== undefined
+    )
     .map((i: any) => ({
       field: i[0],
-      name: i[0][0].toUpperCase() + i[0].slice(1),
-      from: (outline.value as any)[i[0]],
+      name:
+        i[0].charAt(0).toUpperCase() +
+        i[0]
+          .slice(1)
+          .replace(/([A-Z])/g, ' $1')
+          .trim(), // Format camelCase to Title Case
+      from: (article.value as any)[i[0]],
       to: i[1]
     }))
 }
 
-const copyStructurePromptToClipboard = async () => {
-  const data = await GenerateStructureApi.getPrompt(outline.value)
-  const prompt = data.prompt || ''
+/**
+ * Handles the entire process of updating the outline from an API call.
+ * @param apiPromise A promise returned from an ArticleOutlineApi call.
+ */
+const handleOutlineUpdate = async (apiPromise: Promise<any>) => {
+  outlineAskBtnLoading.value = true
   try {
-    await navigator.clipboard.writeText(prompt)
-    store.commit('message/success', 'Prompt copied')
-  } catch {
-    store.commit('message/error', 'Failed to copy')
+    const res = await apiPromise
+    if (res.additionalQuestions?.length) {
+      store.commit('article/addQuestions', res.additionalQuestions)
+      store.commit(
+        'message/info',
+        `Added ${res.additionalQuestions.length} new question(s).`
+      )
+    }
+    completed.value = res.completed || false
+    handleSuggestionProcessing(res.suggestions || [])
+  } catch (error) {
+    store.commit('message/error', 'An error occurred while asking AI.')
+    console.error(error)
+  } finally {
+    outlineAskBtnLoading.value = false
   }
 }
 
-const generateStructureManually = async (text: string) => {
-  if (text) {
-    const res = await GenerateStructureApi.updateManually(text)
-    const { sections, summary } = res
-    if (sections?.length) {
-      const total = sections.reduce(
-        (s: number, x: any) => s + (x.expectedWordCount || 0),
+/**
+ * Handles the entire process of generating the article structure from an API call.
+ * @param apiPromise A promise returned from a GenerateStructureApi call.
+ */
+const handleStructureGeneration = async (apiPromise: Promise<any>) => {
+  structureAskBtnLoading.value = true
+  try {
+    const res = await apiPromise
+    if (res.sections?.length) {
+      const totalWordCount = res.sections.reduce(
+        (sum: number, section: any) => sum + (section.expectedWordCount || 0),
         0
       )
-      store.dispatch('structure/assignOutline', outline.value)
-      store.commit('structure/setWritingNote', summary)
-      store.commit('structure/setExpectedWordCount', total)
-      store.commit('structure/setSections', sections)
-      store.commit('message/info', `Added ${sections.length} sections`)
-    }
-  }
-}
 
-const structureAskBtnLoading = ref(false)
-const generateStructure = async () => {
-  structureAskBtnLoading.value = true
-  const res = await GenerateStructureApi.update(outline.value)
-  const { sections, summary } = res
-  if (sections?.length) {
-    const total = sections.reduce(
-      (s, num) => s + (num.expectedWordCount || 0),
-      0
-    )
-    store.dispatch('structure/assignOutline', outline.value)
-    store.commit('structure/setWritingNote', summary)
-    store.commit('structure/setExpectedWordCount', total)
-    store.commit('structure/setSections', sections)
-    store.commit('message/info', `Added ${sections.length} sections`)
+      // With the unified store, we can update everything in one go!
+      store.commit('article/setState', {
+        qaSummary: res.qaSummary || '',
+        maxWordCount: totalWordCount || maxWordCount.value, // Update max word count with the sum from sections
+        sections: res.sections
+      })
+      store.commit(
+        'message/success',
+        `Generated ${res.sections.length} sections! You can proceed.`
+      )
+      emit('completed')
+    }
+  } catch (error) {
+    store.commit('message/error', 'Failed to generate structure.')
+    console.error(error)
+  } finally {
+    structureAskBtnLoading.value = false
   }
-  structureAskBtnLoading.value = false
 }
 </script>
-
-<style scoped>
-/* No additional CSS needed—using Tailwind and Vuetify utilities */
-</style>

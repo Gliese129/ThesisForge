@@ -1,58 +1,99 @@
 <template>
-  <div class="container mx-auto mt-10">
-    <v-stepper :items="steps" v-model="currentStep">
-      <template v-slot:item.1>
-        <v-card flat>
-          <fill-info />
-        </v-card>
-      </template>
+  <v-card class="container mx-auto mt-8">
+    <v-stepper v-model="currentStep" class="elevation-0">
+      <v-stepper-header>
+        <template v-for="(step, index) in steps" :key="index">
+          <v-stepper-item
+            :title="step"
+            :value="index + 1"
+            :complete="currentStep > index + 1"
+            :editable="true"
+            :color="currentStep > index + 1 ? 'success' : 'primary'"
+          ></v-stepper-item>
+          <v-divider v-if="index < steps.length - 1"></v-divider>
+        </template>
+      </v-stepper-header>
 
-      <template v-slot:item.2>
-        <v-card flat>
-          <define-structure />
-        </v-card>
-      </template>
+      <v-stepper-window>
+        <v-stepper-window-item :value="1">
+          <fill-info @completed="() => handleCompletion(1)" />
+        </v-stepper-window-item>
 
-      <template v-slot:item.3>
-        <v-card title="Step Three" flat>...</v-card>
-      </template>
+        <v-stepper-window-item :value="2">
+          <define-structure @completed="() => handleCompletion(2)" />
+        </v-stepper-window-item>
+
+        <v-stepper-window-item :value="3">
+          <complete-content @completed="() => handleCompletion(3)" />
+        </v-stepper-window-item>
+
+        <v-stepper-window-item :value="4">
+          <v-card flat title="Review">
+            <v-card-text>Review your final article here.</v-card-text>
+          </v-card>
+        </v-stepper-window-item>
+      </v-stepper-window>
+
+      <v-stepper-actions>
+        <v-btn :disabled="currentStep === 1" @click="currentStep--">
+          Previous
+        </v-btn>
+        <v-spacer></v-spacer>
+        <v-btn
+          :disabled="currentStep === steps.length"
+          @click="currentStep++"
+          color="primary"
+        >
+          Next
+        </v-btn>
+      </v-stepper-actions>
     </v-stepper>
-  </div>
+  </v-card>
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onMounted, ref, watch } from 'vue'
 import { useStore } from 'vuex'
 import { key } from '@/store'
 import FillInfo from './FillInfo.vue'
 import DefineStructure from './DefineStructure.vue'
+import CompleteContent from './CompleteContent.vue'
 
 const store = useStore(key)
 
-onMounted(() => {
-  store.dispatch('outline/restoreFromLocalStorage')
-  store.dispatch('structure/restoreFromLocalStorage')
+// 步骤标题
+const steps = ['Fill Info', 'Define Structure', 'Complete Content', 'Review']
+// 当前步骤（1-based）
+const currentStep = ref(1)
+
+/**
+ * 子组件完成时自动推进到下一步
+ */
+const handleCompletion = (completedStep: number) => {
+  if (completedStep < steps.length) {
+    currentStep.value = completedStep + 1
+  }
+}
+
+// 监听 currentStep 的变化，并将其保存到 localStorage
+watch(currentStep, (newStep) => {
+  localStorage.setItem('stepperCurrentStep', JSON.stringify(newStep))
 })
 
-const steps = ['Fill Info', 'Define Structure', 'Complete Content', 'Review']
-// const completed = ref({
-//   0: false,
-//   1: false,
-//   2: false,
-//   3: false
-// })
-// const latestStep = computed(() => {
-//   return Object.keys(completed).reduce((max, key) => {
-//     return completed[key as unknown as keyof typeof completed]
-//       ? Math.max(max, Number(key) + 1)
-//       : max
-//   }, 0)
-// })
-const currentStep = ref(1)
+onMounted(() => {
+  // 1. 页面加载时，尝试从 localStorage 恢复上一次的步骤
+  const savedStep = localStorage.getItem('stepperCurrentStep')
+  if (savedStep) {
+    currentStep.value = JSON.parse(savedStep)
+  }
+
+  // 2. 恢复文章数据
+  store.dispatch('article/restoreFromLocalStorage')
+})
 </script>
 
 <style scoped>
 .container {
-  max-width: 90%;
+  max-width: 95%;
 }
 </style>

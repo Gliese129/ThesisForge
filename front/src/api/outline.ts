@@ -1,7 +1,7 @@
 import type { ArticleOutlineState } from '@/store/outline'
 import axios from './config'
 
-let baseUrl = '/article/outline'
+let baseUrl = '/article/update-outline'
 
 interface Prompt {
   prompt: string
@@ -20,10 +20,10 @@ export default {
         ([_, value]) => value !== undefined && value !== null && value !== ''
       )
     )
-    return await axios.post(`${baseUrl}/generate/get-prompt`, filteredData)
+    return await axios.post(`${baseUrl}/get-prompt`, filteredData)
   },
   updateManually: async (data: string): Promise<Response> => {
-    return await axios.post(`${baseUrl}/update/manual`, {
+    return await axios.post(`${baseUrl}/manual`, {
       text: data
     })
   },
@@ -34,6 +34,6 @@ export default {
         ([_, value]) => value !== undefined && value !== null && value !== ''
       )
     )
-    return await axios.post(`${baseUrl}/update`, filteredData)
+    return await axios.post(`${baseUrl}`, filteredData)
   }
 }
