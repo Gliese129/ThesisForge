@@ -1,5 +1,8 @@
+from typing import List
+
 from model.article import ArticleOutline
-from utils.formatter import format_outline_info, format_extra_questions
+from model.section import Section
+from utils.formatter import format_outline_info, format_extra_questions, format_section_plans
 
 
 def generate_outline_prompt(outline: ArticleOutline) -> str:
@@ -13,45 +16,99 @@ Below is a student's article writing plan:
 
 Additional clarifications from the student (if any):
 {formatted_extra_questions}
+
+Please provide your analysis and suggestions as a single valid JSON object in one of these schemas:
 """"""
-Please perform the following steps:
+If more information is needed:
+{
+  "status": "Need info",
+  "questions": [
+    "First follow-up question?",
+    "Second follow-up question?"
+  ],
+  "suggestions": [
+    {"field": "fieldName", "suggestion": "improvement"}
+  ]
+}
 
-1. Carefully analyze the plan and identify any vague or incomplete areas.  
-2. If there is missing, vague, or potentially inconsistent information, ask 2–4 specific follow-up questions to clarify.
-   ⚠️ Do not mention field names. Ask naturally, as if you're conversing.  
-3. Suggest any improvements to the existing fields by explicitly indicating which field you're modifying and what the updated value should be.
-   ⚠️ Suggest at most one improvement per field.
-   ⚠️ Do not add any explanations, comments, punctuation, or quotation marks.
-   ⚠️ Do not suggest new fields, only improvements to existing ones. Only list fields that need improvement.
-4. If all necessary information is sufficient for generating an outline, begin your response with:  
-   Status: Outline confirmed
-   You may still provide optional suggestions if relevant.
-   
-The following are reserved structured fields.  
-If you find issues or improvements for them, list them in Suggestions, not in Questions:
+If all required information is present:
+{
+  "status": "Outline confirmed",
+  "questions": [],
+  "suggestions": []
+}
 
-title, subjectArea, purpose, targetAudience, language, minWordCount, maxWordCount, requireReferences, includeFormulas, preferredTone, focusArea, avoidTopics, existingNotes, needAbstract
+Your response MUST be ONLY the JSON object, with no extra text or formatting. It must be parseable by Python's json.loads().
+"""
+    return prompt.strip()
 
-Only ask clarifying questions for other missing or high-level information.
+def generate_structure_prompt(outline: ArticleOutline) -> str:
+    formatted_outline_info = format_outline_info(outline)
+    formatted_extra_questions = format_extra_questions(outline)
+    prompt = f"""
+You are an expert academic writing assistant.
 
-### Output Format
-If more info is needed:
-- Status: Need info
-- Questions:
-    - ...
-    - ...
-- Suggestions:
-    - {field name} → {suggested improvement}
-    - ...
+Below is a student's article writing plan:
+{formatted_outline_info}
 
-If info is sufficient:
-- Status: Outline confirmed
-- Questions:
-    - ...
-    - ...
+Additional clarifications from the student (if any):
+{formatted_extra_questions}
 
-- Suggestions:
-    - {field name} → {suggested improvement}
-    - ...
+The student has provided a confirmed and complete writing plan for their article.
+
+Please generate a detailed outline for the article as a JSON object.
+""""""
+The JSON must contain two keys:
+1. "sections": an array of objects conforming to the Section schema:
+   [
+     {
+       "title": "...",
+       "description": "...",
+       "expectedWordCount": <number or null>,
+       "note": <string or null>
+     },
+     ...
+   ]
+2. "qaSummary": a concise string that integrates the key points from the previous Q&A clarifications and the outline’s summary, minimizing token usage.
+
+Your response MUST be ONLY this JSON object, with no extra text. It must be parseable by Python's json.loads().
+"""
+    return prompt.strip()
+
+
+
+def update_structure_prompt(outline: ArticleOutline, sections: List[Section]) -> str:
+    formatted_outline_info = format_outline_info(outline)
+    qa_summary = outline.qa_summary or ""
+    formatted_section_plan = format_section_plans(sections)
+    prompt = """
+You are an expert academic writing assistant.
+
+The student has provided their article plan and current sections.
+
+Please generate a structured article outline update as a single JSON object with exactly these keys:
+
+1. "sections": an array of objects matching the Section schema:
+   [
+     {
+       "title": "...",
+       "description": "...",
+       "wordCount": <number or null>,
+       "note": <string or null>
+     },
+     ...
+   ]
+2. "qaSummary": a concise string integrating any new clarifications and summary notes.
+3. "completed": a boolean. Set to true if no changes are needed (keep sections as-is), or false if you modified the sections or summary.
+"""f"""
+Context:
+- Outline Information:
+{formatted_outline_info}
+- Additional Q&A Summary:
+{qa_summary}
+- Current Section Plans:
+{formatted_section_plan}
+
+Your response MUST be ONLY this JSON object. No plaintext, no extra commentary. It must parse with json.loads().
 """
     return prompt.strip()

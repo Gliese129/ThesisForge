@@ -1,4 +1,8 @@
+from typing import List
+
 from model.article import ArticleOutline
+from model.section import Section
+
 
 def format_outline_info(outline: ArticleOutline) -> str:
     lines = [
@@ -39,3 +43,17 @@ def format_extra_questions(outline: ArticleOutline) -> str:
 
     questions = [f"{i+1}. {q.question} (Answer: {q.answer})" for i, q in enumerate(outline.additional_questions)]
     return "\n".join(questions)
+
+
+def format_section_plans(sections: List[Section]) -> str:
+    if not sections:
+        return "No sections provided."
+
+    formatted_sections = []
+    for i, section in enumerate(sections):
+        section_info = (f"{i+1}. {section.title} ({section.expected_word_count} words): \n "
+                        f"Description: {section.description} \n"
+                        f"Additional Notes: {section.note or 'None'}")
+        formatted_sections.append(section_info)
+
+    return "\n".join(formatted_sections)
