@@ -10,12 +10,13 @@
       >
         <!-- Inline commands group -->
         <v-list-item
-          v-for="item in filteredMenuList[0]"
+          v-for="(item, i) in filteredMenuList[0]"
           :key="item.idx"
-          @mousemove="activeIdx = item.idx"
+          @mousemove="activeFlatIndex = getFlatIndex(0, i)"
           @mousedown.prevent="select(item)"
           :value="item.idx"
-          class="cursor-pointer rounded hover:bg-slate-100"
+          class="cursor-pointer rounded flex items-center px-2 py-1"
+          :active="isActive(0, i)"
           :prepend-icon="item.icon"
         >
           <span class="mx-2 text-sm">{{ item.label }}</span>
@@ -31,24 +32,25 @@
 
         <!-- Block commands group -->
         <v-list-item
-          v-for="item in filteredMenuList[1]"
+          v-for="(item, i) in filteredMenuList[1]"
           :key="item.idx"
-          @mousemove="activeIdx = item.idx"
+          @mousemove="activeFlatIndex = getFlatIndex(1, i)"
           @mousedown.prevent="select(item)"
           :value="item.idx"
-          :class="[
-            'cursor-pointer rounded flex items-center px-2 py-1',
-            item.idx === activeIdx ? 'bg-slate-100' : 'hover:bg-slate-100'
-          ]"
+          class="cursor-pointer rounded flex items-center px-2 py-1"
+          :active="isActive(1, i)"
           :prepend-icon="item.icon"
         >
           <span class="mx-2 text-sm">{{ item.label }}</span>
           <v-chip density="compact">{{ item.code }}</v-chip>
         </v-list-item>
+
+        <!-- Optional empty state -->
         <v-list-item
           v-show="
-            filteredMenuList[0].length == 0 && filteredMenuList[1].length == 0
+            filteredMenuList[0].length === 0 && filteredMenuList[1].length === 0
           "
+          class="opacity-60"
         >
           No matched item
         </v-list-item>
@@ -58,13 +60,20 @@
 </template>
 
 <script setup lang="ts">
-const divRef = ref<HTMLDivElement | null>(null)
+/**
+ * Slash menu with cross-group keyboard navigation, robust filtering, and ESC to close.
+ * - Linear index (activeFlatIndex) so ArrowUp/Down traverses all items seamlessly.
+ * - Tab / Shift+Tab also navigate; Home / End jump to ends.
+ * - ESC closes the menu and clears trailing.
+ * - Filtering matches code prefix and fuzzy label.
+ */
 
-import { ref, onMounted, onUnmounted, watch } from 'vue'
+import { ref, onMounted, onUnmounted, watch, computed } from 'vue'
 import { usePluginViewContext } from '@prosemirror-adapter/vue'
 import { SlashProvider } from '@milkdown/plugin-slash'
 import { editorViewCtx } from '@milkdown/core'
 import type { Ctx } from '@milkdown/ctx'
+import { useInstance } from '@milkdown/vue'
 import { callCommand } from '@milkdown/utils'
 import {
   createCodeBlockCommand,
@@ -76,6 +85,9 @@ import {
   insertImageCommand
 } from '@milkdown/preset-commonmark'
 import { insertTableCommand } from '@milkdown/preset-gfm'
+
+// --- Refs ---
+const divRef = ref<HTMLDivElement | null>(null)
 
 // --- Types ---
 type MenuItem = {
@@ -90,14 +102,18 @@ type MenuGroup = MenuItem[][]
 
 // --- Milkdown / PM view ---
 const { view, prevState } = usePluginViewContext()
+const [loading, get] = useInstance()
 
-// DOM ref for slash menu container (must be real element)
+// --- UI states ---
+/** Whether the menu is visible */
+const showMenu = ref(false)
+/** Trailing "/xxx" fragment string (including the slash), used for deletion */
+const trailing = ref<string | null>('')
+/** Active linear index in the flattened filtered list */
+const activeFlatIndex = ref<number>(0)
 
-// UI states
-const activeIdx = ref<number>(0)
-
-// Define slash menu items (mdi 图标名仅示例，可按你的图标集替换)
-const menuList = [
+// --- Static menu data ---
+const menuList: MenuGroup = [
   [
     {
       idx: 1,
@@ -184,8 +200,39 @@ const menuList = [
     }
   ]
 ]
+
+/** Raw filtered groups (kept as 2D for rendering) */
 const filteredMenuList = ref<MenuGroup>(menuList)
 
+/** Flattened items for linear navigation */
+const flatItems = computed<MenuItem[]>(() => filteredMenuList.value.flat())
+
+/** Map (groupIndex, itemIndex) -> flat linear index */
+const getFlatIndex = (groupIndex: number, itemIndex: number) => {
+  return groupIndex === 0
+    ? itemIndex
+    : filteredMenuList.value[0].length + itemIndex
+}
+
+/** Get item by flat linear index */
+const getItemByFlatIndex = (i: number) => flatItems.value[i]
+
+/** Whether (groupIndex, itemIndex) is currently active */
+const isActive = (groupIndex: number, itemIndex: number) =>
+  activeFlatIndex.value === getFlatIndex(groupIndex, itemIndex)
+
+/** Clamp activeFlatIndex into [0, flatItems.length-1] */
+const clampActive = () => {
+  const n = flatItems.value.length
+  if (n <= 0) {
+    activeFlatIndex.value = 0
+    return
+  }
+  if (activeFlatIndex.value < 0) activeFlatIndex.value = 0
+  if (activeFlatIndex.value > n - 1) activeFlatIndex.value = n - 1
+}
+
+// --- SlashProvider lifecycle & key handling ---
 let slashProvider: SlashProvider | null = null
 
 onMounted(() => {
@@ -195,37 +242,66 @@ onMounted(() => {
   })
 
   slashProvider.update(view.value!, prevState.value)
+
+  // Intercept keydown when the menu is open
+  view.value.setProps({
+    handleKeyDown: (_, event) => {
+      if (!showMenu.value) return false
+
+      const navigationalKeys = [
+        'ArrowDown',
+        'ArrowUp',
+        'Enter',
+        'Escape',
+        'Tab',
+        'Home',
+        'End'
+      ]
+      if (!navigationalKeys.includes(event.key)) return false
+
+      // If menu is open but empty, let editor handle keys
+      if (flatItems.value.length === 0 && event.key !== 'Escape') return false
+
+      event.preventDefault()
+      event.stopPropagation()
+
+      if (
+        event.key === 'ArrowDown' ||
+        (event.key === 'Tab' && !event.shiftKey)
+      ) {
+        activeFlatIndex.value = Math.min(
+          activeFlatIndex.value + 1,
+          flatItems.value.length - 1
+        )
+      } else if (
+        event.key === 'ArrowUp' ||
+        (event.key === 'Tab' && event.shiftKey)
+      ) {
+        activeFlatIndex.value = Math.max(activeFlatIndex.value - 1, 0)
+      } else if (event.key === 'Home') {
+        activeFlatIndex.value = 0
+      } else if (event.key === 'End') {
+        activeFlatIndex.value = flatItems.value.length - 1
+      } else if (event.key === 'Enter') {
+        const current = getItemByFlatIndex(activeFlatIndex.value)
+        if (current) select(current)
+      } else if (event.key === 'Escape') {
+        showMenu.value = false
+        trailing.value = null
+      }
+
+      return true
+    }
+  })
 })
 
-// 在 view 或 prevState 变化时更新 Provider
-const showMenu = ref(false)
-const trailing = ref<string | null>('')
-const checkSlash = (text: string) => {
-  // get /xxx
-  let slashMatch = text.match(/\/(\w*)$/)
-  let cmd
-  if (slashMatch !== null) {
-    trailing.value = slashMatch[0]
-    cmd = slashMatch[1]
-    showMenu.value = true
-  } else {
-    trailing.value = null
-    cmd = null
-    showMenu.value = false
-  }
-  filteredMenuList.value =
-    cmd !== null
-      ? menuList.map((subgroup) =>
-          subgroup.filter((item) => cmd === '' || item.code.startsWith(cmd))
-        )
-      : [[], []]
-}
+// Update provider & check slash on view or prevState changes
 watch([view, prevState], () => {
   try {
     slashProvider?.update(view.value, prevState.value)
     checkSlash(view.value.state.doc.textContent)
+    clampActive()
   } catch {
-    // 静默兜底，防止意外空引用
     console.warn(
       'Failed to update slash provider:',
       slashProvider,
@@ -240,49 +316,80 @@ onUnmounted(() => {
   slashProvider = null
 })
 
-// —— helpers ——
+/** Update menu visibility and filtered items based on the trailing "/xxx" pattern */
+const checkSlash = (text: string) => {
+  // Match the trailing "/xxx" (letters, digits, underscore)
+  const slashMatch = text.match(/\/(\w*)$/)
+  let cmd: string | null
 
-// Milkdown 的 callCommand 需要 Ctx/CtxLike，这里提供最小 CtxLike 适配（只响应 editorViewCtx）
-const getCtxLike = (): Ctx => {
-  const ctxLike = {
-    get: <T,>(key: unknown): T => {
-      // 仅当请求 editorViewCtx 时返回 ProseMirror View
-      if ((key as any) === editorViewCtx) {
-        return view.value as unknown as T
-      }
-      // 其他 key 返回 undefined，够用
-      return undefined as unknown as T
+  if (slashMatch !== null) {
+    trailing.value = slashMatch[0] // include the slash
+    cmd = slashMatch[1] // bare command text
+  } else {
+    trailing.value = null
+    cmd = null
+  }
+
+  // Filter logic:
+  // - If cmd is null -> hide menu (empty groups)
+  // - If cmd is "" (just "/") -> show all items
+  // - Otherwise:
+  //     * code: prefix match (fast)
+  //     * label: case-insensitive fuzzy includes (user-friendly)
+  const filterGroups = (q: string | null): MenuGroup => {
+    if (q === null) return [[], []]
+    const norm = q.trim().toLowerCase()
+    const matches = (item: MenuItem) => {
+      if (norm === '') return true
+      const codeHit = item.code.toLowerCase().startsWith(norm)
+      const labelHit = item.label.toLowerCase().includes(norm)
+      return codeHit || labelHit
     }
-  } as unknown as Ctx
-  return ctxLike
-}
+    return menuList.map((subgroup) => subgroup.filter(matches))
+  }
 
-// 移除光标前的 “/”
-const removeLeadingSlash = () => {
-  const pmView = view.value
-  if (!pmView) return
-  const { state, dispatch } = pmView
-  const { from } = state.selection
-  const tr = state.tr
-  const charBefore = from > 0 ? state.doc.textBetween(from - 1, from) : ''
-  if (charBefore === '/') {
-    dispatch(tr.deleteRange(from - 1, from))
+  filteredMenuList.value = filterGroups(cmd)
+
+  const hasAny =
+    filteredMenuList.value[0].length > 0 || filteredMenuList.value[1].length > 0
+
+  showMenu.value = hasAny
+  if (hasAny) {
+    // Reset highlight to the first item whenever menu opens / refilters
+    activeFlatIndex.value = 0
   }
 }
 
-// 选择菜单项时触发命令
-const select = (item: MenuItem) => {
-  removeLeadingSlash()
-  const ctxLike = getCtxLike()
-  callCommand(item.cmd, item.payload)(ctxLike)
-  showMenu.value = false
+/** Remove the trailing "/xxx" fragment before executing the command */
+const removeLeadingSlash = (ctx: Ctx) => {
+  const view = ctx.get(editorViewCtx)
+  const { dispatch, state } = view
+  const { tr, selection } = state
+  const { from } = selection
+  const trailingLength = trailing.value?.length || 0
+  if (trailingLength === 0) return
+  dispatch(tr.deleteRange(from - trailingLength, from))
 }
 
-// 防止点击内部关闭
-const handleMouseDown = () => {}
+/** Execute selected command and close the menu */
+const select = (item: MenuItem) => {
+  if (loading.value) return
+  get()?.action((ctx) => {
+    removeLeadingSlash(ctx)
+    return callCommand(item.cmd, item.payload)(ctx)
+  })
+  showMenu.value = false
+  trailing.value = null
+}
+
+/** Prevent outside click closing / focus loss jitter while interacting with the menu */
+const handleMouseDown = () => {
+  // Intentionally empty: prevents event bubbling to the editor
+}
 </script>
 
 <style scoped>
+/* Keep as a utility if you want to toggle by data attribute */
 .slash {
   display: none;
 }
