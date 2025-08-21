@@ -1,80 +1,112 @@
 <template>
-  <!-- Slash menu using Vuetify and TailwindCSS -->
-  <div ref="divRef" class="absolute" v-show="showMenu">
-    <!-- Menu list -->
-    <v-card width="250">
-      <v-list
+  <!-- Slash command menu with dynamic tabs + anchor scroll -->
+  <div
+    ref="containerRef"
+    class="absolute z-[1000]"
+    v-show="showMenu"
+    style="zoom: 0.9"
+  >
+    <v-card
+      class="rounded-sm overflow-hidden px-1"
+      width="280"
+      density="compact"
+    >
+      <!-- Dynamic tabs from commands -->
+      <v-tabs
+        v-model="activeGroupKey"
+        bg-color="transparent"
+        class="p-2"
         density="compact"
-        class="py-2"
-        @mousedown.prevent.stop="handleMouseDown"
       >
-        <!-- Inline commands group -->
-        <v-list-item
-          v-for="(item, i) in filteredMenuList[0]"
-          :key="item.idx"
-          @mousemove="activeFlatIndex = getFlatIndex(0, i)"
-          @mousedown.prevent="select(item)"
-          :value="item.idx"
-          class="cursor-pointer rounded flex items-center px-2 py-1"
-          :active="isActive(0, i)"
-          :prepend-icon="item.icon"
-        >
-          <span class="mx-2 text-sm">{{ item.label }}</span>
-          <v-chip density="compact">{{ item.code }}</v-chip>
-        </v-list-item>
+        <v-tab v-for="groupKey in groupOrder" :key="groupKey" :value="groupKey">
+          {{ groupLabels[groupKey] ?? groupKey }}
+        </v-tab>
+      </v-tabs>
 
-        <v-divider
-          class="my-1"
-          v-show="
-            filteredMenuList[0].length > 0 && filteredMenuList[1].length > 0
-          "
-        />
+      <v-divider />
 
-        <!-- Block commands group -->
-        <v-list-item
-          v-for="(item, i) in filteredMenuList[1]"
-          :key="item.idx"
-          @mousemove="activeFlatIndex = getFlatIndex(1, i)"
-          @mousedown.prevent="select(item)"
-          :value="item.idx"
-          class="cursor-pointer rounded flex items-center px-2 py-1"
-          :active="isActive(1, i)"
-          :prepend-icon="item.icon"
-        >
-          <span class="mx-2 text-sm">{{ item.label }}</span>
-          <v-chip density="compact">{{ item.code }}</v-chip>
-        </v-list-item>
+      <!-- Scrollable list; groups act like anchors -->
+      <div ref="scrollRef" class="overflow-y-auto py-1">
+        <v-list density="compact" max-height="400">
+          <template v-for="groupKey in groupOrder" :key="groupKey">
+            <template v-if="filteredCommands[groupKey]?.length">
+              <!-- Group header as anchor -->
+              <v-list-subheader
+                :ref="(el: any) => (sectionEls[groupKey] = el)"
+                class="text-gray-500"
+              >
+                {{ groupLabels[groupKey] ?? groupKey }}
+              </v-list-subheader>
 
-        <!-- Optional empty state -->
-        <v-list-item
-          v-show="
-            filteredMenuList[0].length === 0 && filteredMenuList[1].length === 0
-          "
-          class="opacity-60"
-        >
-          No matched item
-        </v-list-item>
-      </v-list>
+              <!-- Items -->
+              <v-list-item
+                v-for="(item, i) in filteredCommands[groupKey]"
+                :key="item.idx"
+                @mousemove="activeFlatIndex = getLinearIndex(groupKey, i)"
+                @mousedown.prevent="select(item)"
+                class="cursor-pointer rounded px-2 py-1"
+                :active="activeFlatIndex === getLinearIndex(groupKey, i)"
+                density="compact"
+              >
+                <template #prepend>
+                  <v-icon :icon="item.icon" size="18" />
+                </template>
+
+                <!-- Title -->
+                <v-list-item-title
+                  class="mx-2 text-sm whitespace-nowrap overflow-hidden text-ellipsis"
+                >
+                  {{ item.label }}
+                </v-list-item-title>
+
+                <!-- Right-aligned gray shortcut -->
+                <template #append>
+                  <span
+                    class="text-xs text-gray-400 whitespace-nowrap select-none"
+                  >
+                    /{{ item.code }}
+                  </span>
+                </template>
+              </v-list-item>
+            </template>
+          </template>
+
+          <!-- Empty state -->
+          <v-list-item v-if="flatItems.length === 0" class="opacity-60">
+            No matched command
+          </v-list-item>
+        </v-list>
+      </div>
     </v-card>
   </div>
 </template>
 
 <script setup lang="ts">
 /**
- * Slash menu with cross-group keyboard navigation, robust filtering, and ESC to close.
- * - Linear index (activeFlatIndex) so ArrowUp/Down traverses all items seamlessly.
- * - Tab / Shift+Tab also navigate; Home / End jump to ends.
- * - ESC closes the menu and clears trailing.
- * - Filtering matches code prefix and fuzzy label.
+ * Compact slash command menu:
+ * - Card auto width (no fixed width), small max height
+ * - Gray '/code' aligned to the right via v-list-item #append
+ * - Tabs are anchors built dynamically from `commands`
+ * - Left/Right switches groups + scrollIntoView; Up/Down & Tab/Shift+Tab move linearly across all items
+ * - Enter runs command; Esc closes
  */
 
-import { ref, onMounted, onUnmounted, watch, computed } from 'vue'
+import {
+  ref,
+  onMounted,
+  onUnmounted,
+  watch,
+  computed,
+  reactive,
+  nextTick
+} from 'vue'
 import { usePluginViewContext } from '@prosemirror-adapter/vue'
 import { SlashProvider } from '@milkdown/plugin-slash'
 import { editorViewCtx } from '@milkdown/core'
 import type { Ctx } from '@milkdown/ctx'
 import { useInstance } from '@milkdown/vue'
 import { callCommand } from '@milkdown/utils'
+
 import {
   createCodeBlockCommand,
   insertHrCommand,
@@ -86,11 +118,7 @@ import {
 } from '@milkdown/preset-commonmark'
 import { insertTableCommand } from '@milkdown/preset-gfm'
 
-// --- Refs ---
-const divRef = ref<HTMLDivElement | null>(null)
-
-// --- Types ---
-type MenuItem = {
+type CommandItem = {
   idx: number
   cmd: any
   label: string
@@ -98,27 +126,33 @@ type MenuItem = {
   payload?: any
   code: string
 }
-type MenuGroup = MenuItem[][]
+type CommandGroups = Record<string, CommandItem[]>
 
-// --- Milkdown / PM view ---
+const containerRef = ref<HTMLDivElement | null>(null)
+const scrollRef = ref<HTMLDivElement | null>(null)
+
 const { view, prevState } = usePluginViewContext()
 const [loading, get] = useInstance()
 
-// --- UI states ---
-/** Whether the menu is visible */
 const showMenu = ref(false)
-/** Trailing "/xxx" fragment string (including the slash), used for deletion */
 const trailing = ref<string | null>('')
-/** Active linear index in the flattened filtered list */
+
+const activeGroupKey = ref<string>('text')
 const activeFlatIndex = ref<number>(0)
 
-// --- Static menu data ---
-const menuList: MenuGroup = [
-  [
+const groupLabels: Record<string, string> = {
+  text: '文本',
+  list: '列表',
+  advanced: '高级'
+}
+
+/** Dynamic commands (tabs come from keys) */
+const commands: CommandGroups = {
+  text: [
     {
       idx: 1,
       cmd: wrapInHeadingCommand.key,
-      label: 'Heading 1',
+      label: '标题 1',
       icon: 'mdi-format-header-1',
       payload: 1,
       code: 'h1'
@@ -126,7 +160,7 @@ const menuList: MenuGroup = [
     {
       idx: 2,
       cmd: wrapInHeadingCommand.key,
-      label: 'Heading 2',
+      label: '标题 2',
       icon: 'mdi-format-header-2',
       payload: 2,
       code: 'h2'
@@ -134,137 +168,231 @@ const menuList: MenuGroup = [
     {
       idx: 3,
       cmd: wrapInHeadingCommand.key,
-      label: 'Heading 3',
+      label: '标题 3',
       icon: 'mdi-format-header-3',
       payload: 3,
       code: 'h3'
     },
     {
-      idx: 4,
-      cmd: wrapInHeadingCommand.key,
-      label: 'Heading 4',
-      icon: 'mdi-format-header-4',
-      payload: 4,
-      code: 'h4'
-    },
-    {
-      idx: 5,
-      cmd: wrapInBulletListCommand.key,
-      label: 'Bullet List',
-      icon: 'mdi-format-list-bulleted',
-      code: 'ul'
-    },
-    {
-      idx: 6,
-      cmd: wrapInOrderedListCommand.key,
-      label: 'Numbered List',
-      icon: 'mdi-format-list-numbered',
-      code: 'ol'
-    }
-  ],
-  [
-    {
-      idx: 7,
-      cmd: insertTableCommand.key,
-      label: 'Insert Table',
-      icon: 'mdi-table',
-      code: 'table'
+      idx: 10,
+      cmd: insertHrCommand.key,
+      label: '分割线',
+      icon: 'mdi-minus',
+      code: 'divider'
     },
     {
       idx: 8,
       cmd: wrapInBlockquoteCommand.key,
-      label: 'Blockquote',
+      label: '引用',
       icon: 'mdi-format-quote-close',
       code: 'quote'
+    }
+  ],
+  list: [
+    {
+      idx: 5,
+      cmd: wrapInBulletListCommand.key,
+      label: '项目列表',
+      icon: 'mdi-format-list-bulleted',
+      code: 'bullet-list'
     },
     {
-      idx: 9,
+      idx: 6,
+      cmd: wrapInOrderedListCommand.key,
+      label: '编号列表',
+      icon: 'mdi-format-list-numbered',
+      code: 'ordered-list'
+    }
+  ],
+  advanced: [
+    {
+      idx: 7,
+      cmd: insertImageCommand.key,
+      label: '图片',
+      icon: 'mdi-image',
+      code: 'image'
+    },
+    {
+      idx: 8,
       cmd: createCodeBlockCommand.key,
-      label: 'Code Block',
+      label: '代码块',
       icon: 'mdi-code-braces',
       code: 'code'
     },
     {
-      idx: 10,
-      cmd: insertHrCommand.key,
-      label: 'Horizontal Rule',
-      icon: 'mdi-minus',
-      code: 'hr'
-    },
-    {
-      idx: 11,
-      cmd: insertImageCommand.key,
-      label: 'Insert Image',
-      icon: 'mdi-image',
-      code: 'image'
+      idx: 9,
+      cmd: insertTableCommand.key,
+      label: '表格',
+      icon: 'mdi-table',
+      code: 'table'
     }
   ]
-]
-
-/** Raw filtered groups (kept as 2D for rendering) */
-const filteredMenuList = ref<MenuGroup>(menuList)
-
-/** Flattened items for linear navigation */
-const flatItems = computed<MenuItem[]>(() => filteredMenuList.value.flat())
-
-/** Map (groupIndex, itemIndex) -> flat linear index */
-const getFlatIndex = (groupIndex: number, itemIndex: number) => {
-  return groupIndex === 0
-    ? itemIndex
-    : filteredMenuList.value[0].length + itemIndex
 }
 
-/** Get item by flat linear index */
-const getItemByFlatIndex = (i: number) => flatItems.value[i]
+const groupOrder = computed(() => Object.keys(commands))
 
-/** Whether (groupIndex, itemIndex) is currently active */
-const isActive = (groupIndex: number, itemIndex: number) =>
-  activeFlatIndex.value === getFlatIndex(groupIndex, itemIndex)
+/** Filtered groups */
+const filteredCommands = reactive<CommandGroups>({})
 
-/** Clamp activeFlatIndex into [0, flatItems.length-1] */
-const clampActive = () => {
-  const n = flatItems.value.length
-  if (n <= 0) {
-    activeFlatIndex.value = 0
+const applyFilter = (query: string | null) => {
+  const match = (item: CommandItem, q: string) => {
+    if (!q) return true
+    const n = q.toLowerCase()
+    return (
+      item.code.toLowerCase().startsWith(n) ||
+      item.label.toLowerCase().includes(n)
+    )
+  }
+
+  if (query === null) {
+    for (const k of groupOrder.value) filteredCommands[k] = []
+    showMenu.value = false
     return
   }
-  if (activeFlatIndex.value < 0) activeFlatIndex.value = 0
-  if (activeFlatIndex.value > n - 1) activeFlatIndex.value = n - 1
+
+  const q = query.trim()
+  let any = false
+  for (const k of groupOrder.value) {
+    const arr = commands[k] ?? []
+    const filtered = q === '' ? arr : arr.filter((it) => match(it, q))
+    filteredCommands[k] = filtered
+    if (filtered.length) any = true
+  }
+  showMenu.value = any
+
+  // Ensure active group points to a non-empty group if possible
+  if (showMenu.value && !filteredCommands[activeGroupKey.value]?.length) {
+    const next = groupOrder.value.find((k) => filteredCommands[k]?.length)
+    if (next) activeGroupKey.value = next
+  }
+  activeFlatIndex.value = 0
 }
 
-// --- SlashProvider lifecycle & key handling ---
-let slashProvider: SlashProvider | null = null
+/** Flatten filtered items for linear navigation */
+const flatItems = computed<
+  { groupKey: string; item: CommandItem; localIndex: number }[]
+>(() => {
+  const out: { groupKey: string; item: CommandItem; localIndex: number }[] = []
+  for (const k of groupOrder.value) {
+    const arr = filteredCommands[k] || []
+    arr.forEach((item, i) => out.push({ groupKey: k, item, localIndex: i }))
+  }
+  return out
+})
 
+/** Map (groupKey, localIndex) -> linear index */
+const getLinearIndex = (groupKey: string, localIndex: number) => {
+  let idx = 0
+  for (const k of groupOrder.value) {
+    if (k === groupKey) return idx + localIndex
+    idx += filteredCommands[k]?.length ?? 0
+  }
+  return 0
+}
+
+/** Anchors for group headers */
+const sectionEls: Record<string, HTMLElement | null> = reactive({})
+
+const scrollToGroup = async (key: string) => {
+  await nextTick()
+  const el = sectionEls[key]
+  el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
+
+const switchGroup = (delta: number) => {
+  if (!showMenu.value) return
+  const order = groupOrder.value
+  const has = (k: string) => (filteredCommands[k]?.length ?? 0) > 0
+  let i = order.indexOf(activeGroupKey.value)
+  let tries = 0
+  do {
+    i = (i + delta + order.length) % order.length
+    tries++
+  } while (!has(order[i]) && tries <= order.length + 1)
+  activeGroupKey.value = order[i]
+  scrollToGroup(activeGroupKey.value)
+}
+
+/** Detect trailing '/xxx' and filter */
+const detectSlash = (text: string) => {
+  const m = text.match(/\/(\w*)$/)
+  if (!m) {
+    trailing.value = null
+    applyFilter(null)
+    return
+  }
+  trailing.value = m[0]
+  applyFilter(m[1] ?? '')
+}
+
+const removeLeadingSlash = (ctx: Ctx) => {
+  const v = ctx.get(editorViewCtx)
+  const { dispatch, state } = v
+  const { tr, selection } = state
+  const { from } = selection
+  const n = trailing.value?.length ?? 0
+  if (n > 0) dispatch(tr.deleteRange(from - n, from))
+}
+
+const select = (item: CommandItem) => {
+  if (loading.value) return
+  get()?.action((ctx) => {
+    removeLeadingSlash(ctx)
+    return callCommand(item.cmd, item.payload)(ctx)
+  })
+  showMenu.value = false
+  trailing.value = null
+}
+
+/** Provider + key handling */
+let slashProvider: SlashProvider | null = null
 onMounted(() => {
   slashProvider = new SlashProvider({
-    content: divRef.value!,
+    content: containerRef.value!,
     debounce: 50
   })
-
   slashProvider.update(view.value!, prevState.value)
 
-  // Intercept keydown when the menu is open
   view.value.setProps({
     handleKeyDown: (_, event) => {
       if (!showMenu.value) return false
 
-      const navigationalKeys = [
+      const keys = [
         'ArrowDown',
         'ArrowUp',
+        'ArrowLeft',
+        'ArrowRight',
+        'Tab',
         'Enter',
         'Escape',
-        'Tab',
         'Home',
         'End'
       ]
-      if (!navigationalKeys.includes(event.key)) return false
-
-      // If menu is open but empty, let editor handle keys
-      if (flatItems.value.length === 0 && event.key !== 'Escape') return false
+      if (!keys.includes(event.key)) return false
 
       event.preventDefault()
       event.stopPropagation()
 
+      // Group switching
+      if (event.key === 'ArrowLeft') {
+        switchGroup(-1)
+        return true
+      }
+      if (event.key === 'ArrowRight') {
+        switchGroup(1)
+        return true
+      }
+
+      // Close
+      if (event.key === 'Escape') {
+        showMenu.value = false
+        trailing.value = null
+        return true
+      }
+
+      if (flatItems.value.length === 0) return true
+
+      // Linear navigation
       if (
         event.key === 'ArrowDown' ||
         (event.key === 'Tab' && !event.shiftKey)
@@ -283,31 +411,25 @@ onMounted(() => {
       } else if (event.key === 'End') {
         activeFlatIndex.value = flatItems.value.length - 1
       } else if (event.key === 'Enter') {
-        const current = getItemByFlatIndex(activeFlatIndex.value)
-        if (current) select(current)
-      } else if (event.key === 'Escape') {
-        showMenu.value = false
-        trailing.value = null
+        const curr = flatItems.value[activeFlatIndex.value]?.item
+        if (curr) select(curr)
       }
+
+      // Sync active group to the item under cursor
+      const curr = flatItems.value[activeFlatIndex.value]
+      if (curr) activeGroupKey.value = curr.groupKey
 
       return true
     }
   })
 })
 
-// Update provider & check slash on view or prevState changes
 watch([view, prevState], () => {
   try {
     slashProvider?.update(view.value, prevState.value)
-    checkSlash(view.value.state.doc.textContent)
-    clampActive()
+    detectSlash(view.value.state.doc.textContent)
   } catch {
-    console.warn(
-      'Failed to update slash provider:',
-      slashProvider,
-      view.value,
-      prevState.value
-    )
+    // noop
   }
 })
 
@@ -315,85 +437,6 @@ onUnmounted(() => {
   slashProvider?.destroy()
   slashProvider = null
 })
-
-/** Update menu visibility and filtered items based on the trailing "/xxx" pattern */
-const checkSlash = (text: string) => {
-  // Match the trailing "/xxx" (letters, digits, underscore)
-  const slashMatch = text.match(/\/(\w*)$/)
-  let cmd: string | null
-
-  if (slashMatch !== null) {
-    trailing.value = slashMatch[0] // include the slash
-    cmd = slashMatch[1] // bare command text
-  } else {
-    trailing.value = null
-    cmd = null
-  }
-
-  // Filter logic:
-  // - If cmd is null -> hide menu (empty groups)
-  // - If cmd is "" (just "/") -> show all items
-  // - Otherwise:
-  //     * code: prefix match (fast)
-  //     * label: case-insensitive fuzzy includes (user-friendly)
-  const filterGroups = (q: string | null): MenuGroup => {
-    if (q === null) return [[], []]
-    const norm = q.trim().toLowerCase()
-    const matches = (item: MenuItem) => {
-      if (norm === '') return true
-      const codeHit = item.code.toLowerCase().startsWith(norm)
-      const labelHit = item.label.toLowerCase().includes(norm)
-      return codeHit || labelHit
-    }
-    return menuList.map((subgroup) => subgroup.filter(matches))
-  }
-
-  filteredMenuList.value = filterGroups(cmd)
-
-  const hasAny =
-    filteredMenuList.value[0].length > 0 || filteredMenuList.value[1].length > 0
-
-  showMenu.value = hasAny
-  if (hasAny) {
-    // Reset highlight to the first item whenever menu opens / refilters
-    activeFlatIndex.value = 0
-  }
-}
-
-/** Remove the trailing "/xxx" fragment before executing the command */
-const removeLeadingSlash = (ctx: Ctx) => {
-  const view = ctx.get(editorViewCtx)
-  const { dispatch, state } = view
-  const { tr, selection } = state
-  const { from } = selection
-  const trailingLength = trailing.value?.length || 0
-  if (trailingLength === 0) return
-  dispatch(tr.deleteRange(from - trailingLength, from))
-}
-
-/** Execute selected command and close the menu */
-const select = (item: MenuItem) => {
-  if (loading.value) return
-  get()?.action((ctx) => {
-    removeLeadingSlash(ctx)
-    return callCommand(item.cmd, item.payload)(ctx)
-  })
-  showMenu.value = false
-  trailing.value = null
-}
-
-/** Prevent outside click closing / focus loss jitter while interacting with the menu */
-const handleMouseDown = () => {
-  // Intentionally empty: prevents event bubbling to the editor
-}
 </script>
 
-<style scoped>
-/* Keep as a utility if you want to toggle by data attribute */
-.slash {
-  display: none;
-}
-.slash[data-show='true'] {
-  display: block;
-}
-</style>
+<style scoped></style>

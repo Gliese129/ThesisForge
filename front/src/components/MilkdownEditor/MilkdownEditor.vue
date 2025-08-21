@@ -10,8 +10,12 @@ import { commonmark } from '@milkdown/preset-commonmark'
 import { gfm } from '@milkdown/preset-gfm'
 import { getHTML, outline, replaceAll, getMarkdown } from '@milkdown/utils'
 import { listener, listenerCtx } from '@milkdown/plugin-listener'
+import { codeBlockComponent } from '@milkdown/components/code-block'
+import { imageBlockComponent } from '@milkdown/components/image-block'
+
 // import useTooltip from './plugins/tooltip/index'
 import useSlash from './plugins/slash/index'
+import { setCodeBlock } from './plugins/code/code-block'
 
 const doc = defineModel({ type: String })
 const $emit = defineEmits(['update:modelValue', 'save'])
@@ -26,17 +30,20 @@ useEditor((root) => {
       // @ts-ignore-next-line
       ctx.set(defaultValueCtx, doc.value)
       // watch doc update
-      ctx.get(listenerCtx).markdownUpdated((ctx, markdown) => {
+      ctx.get(listenerCtx).markdownUpdated((_, markdown) => {
         doc.value = markdown
         $emit('update:modelValue', markdown)
       })
       // setTooltip(ctx)
       setSlash(ctx)
+      setCodeBlock(ctx)
     })
     .use(commonmark)
     .use(gfm)
     // .use(tooltip)
     .use(slash)
+    .use(codeBlockComponent)
+    .use(imageBlockComponent)
     .use(listener)
   return editorInstance
 })

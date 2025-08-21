@@ -1,0 +1,208 @@
+/* Light toolbar & language picker for Milkdown code block
+ * All comments in English only.
+ */
+
+/* ---- Theme tokens (override by presets below) ---- */
+:root {
+  --cb-bg: #ffffff;
+  --cb-panel: #f7f8fa;
+  --cb-border: #e5e7eb;
+  --cb-text: #1f2937;
+  --cb-muted: #6b7280;
+  --cb-muted-2: #9aa0a6;
+  --cb-btn: #eef1f5;
+  --cb-btn-hover: #e6eaf0;
+  --cb-shadow: 0 8px 24px rgba(16, 24, 40, 0.08);
+}
+
+.milkdown .milkdown-code-block {
+  /* --- editor surface --- */
+  .cm-editor {
+    background: #f9fafb;
+    border: 1px solid var(--cb-border);
+    border-radius: 0 0 10px 10px;
+    border-top: none;
+  }
+
+  /* --- top toolbar (above editor) --- */
+  > .tools {
+    position: relative; /* anchor for dropdown */
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+
+    background: var(--cb-bg);
+    border: 1px solid var(--cb-border);
+    border-radius: 10px 10px 0 0;
+    padding: 6px 8px;
+
+    /* toggle dropdown by sibling combinator (button ↔ picker are siblings) */
+    .language-button[data-expanded='true'] ~ .language-picker {
+      display: block;
+    }
+    .language-button[data-expanded='false'] ~ .language-picker {
+      display: none !important;
+    }
+
+    /* left: language button */
+    .language-button {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      height: 28px;
+      padding: 0 10px;
+      font-size: 12px;
+      color: var(--cb-muted);
+      background: var(--cb-btn);
+      border: 1px solid var(--cb-border);
+      border-radius: 6px;
+      cursor: pointer;
+
+      /* hide built-in emoji arrow if any */
+      .milkdown-icon {
+        display: none;
+      }
+
+      /* custom arrow (▼/▲) */
+      .expand-icon {
+        width: 12px;
+        height: 12px;
+        position: relative;
+        &::after {
+          content: '▼';
+          font-size: 10px;
+          line-height: 12px;
+          color: var(--cb-muted-2);
+        }
+      }
+      &[data-expanded='true'] .expand-icon::after {
+        content: '▲';
+      }
+
+      &:hover {
+        background: var(--cb-btn-hover);
+      }
+    }
+
+    /* right: copy button */
+    .tools-button-group .copy-button {
+      height: 28px;
+      padding: 0 10px;
+      font-size: 12px;
+      color: var(--cb-muted);
+      background: var(--cb-btn);
+      border: 1px solid var(--cb-border);
+      border-radius: 6px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      &:hover {
+        background: var(--cb-btn-hover);
+      }
+    }
+
+    /* --- language dropdown (card) --- */
+    > .language-picker {
+      /* default hidden; shown by sibling rules above */
+      display: none;
+      position: absolute;
+      top: calc(100% + 8px) !important; /* below toolbar */
+      left: 8px !important; /* align under Text button */
+
+      min-width: 220px;
+      background: var(--cb-bg);
+      color: var(--cb-text);
+      border: 1px solid var(--cb-border);
+      border-radius: 10px;
+      box-shadow: var(--cb-shadow);
+      padding: 10px 10px 8px;
+      z-index: 4;
+
+      .search-box {
+        display: flex;
+      }
+
+      /* 1) search input (reserve room for clear icon on right) */
+      > input[type='text'] {
+        width: 100%;
+        height: 30px;
+        box-sizing: border-box;
+        padding: 0 30px 0 8px; /* right space for clear icon */
+        font-size: 12px;
+        color: #374151;
+        background: var(--cb-panel);
+        border: 1px solid var(--cb-border);
+        border-radius: 6px;
+        outline: none;
+        &::placeholder {
+          color: #9ca3af;
+        }
+        &:focus {
+          border-color: #c5cad3;
+          background: #fff;
+        }
+      }
+
+      /* 2) clear icon pinned at top-right (small) 
+       * NOTE: fallback selector for first button in picker;
+       * if your markup differs, add a class and replace this selector.
+       */
+      > button {
+        position: absolute;
+        top: 14px;
+        right: 14px;
+        width: 16px;
+        height: 16px;
+        padding: 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 11px;
+        line-height: 1;
+        border: 1px solid var(--cb-border);
+        border-radius: 4px;
+        background: var(--cb-btn);
+        cursor: pointer;
+      }
+      > button:hover {
+        background: var(--cb-btn-hover);
+      }
+
+      /* 3) scroll only the list, not the container */
+      > ul,
+      > ol {
+        list-style: none;
+        margin: 8px 0 0;
+        padding: 0;
+        max-height: 300px;
+        overflow: auto;
+      }
+
+      /* 4) list items */
+      li {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 8px;
+        border-radius: 6px;
+        font-size: 13px;
+        color: #374151;
+        cursor: pointer;
+
+        /* remove any bullet-like leading char without touching text flow */
+        text-indent: -0.8em;
+        padding-left: 0.8em;
+
+        &:hover {
+          background: #f3f4f6;
+        }
+        &.active {
+          background: #eef2ff;
+          color: #111827;
+        }
+      }
+    }
+  }
+}

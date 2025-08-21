@@ -4,7 +4,6 @@ import { usePluginViewFactory } from '@prosemirror-adapter/vue'
 import type { PluginViewFactory } from '@prosemirror-adapter/vue'
 import Slash from './Slash.vue'
 import type { Ctx } from '@milkdown/ctx'
-
 /**
  * Composable to configure and control the slash menu plugin in TypeScript.
  */

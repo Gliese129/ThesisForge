@@ -94,7 +94,7 @@ import { ref, computed, watch } from 'vue'
 import { useStore } from 'vuex'
 import { key } from '@/store'
 import type { ArticleSection } from '@/store/article'
-import MilkdownEditorWrapper from '@/components/MilkdownEditor/MilkdownEditorWrapper.vue'
+import MilkdownEditorWrapper from '@/components/CrepeEditor/CrepeEditorWrapper.vue'
 // @ts-ignore-next-line
 import { watchDebounced } from '@vueuse/core'
 

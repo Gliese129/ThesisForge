@@ -14,7 +14,7 @@
 
 <script setup lang="ts">
 import { MilkdownProvider } from '@milkdown/vue'
-import MilkdownEditor from './MilkdownEditor.vue'
+import MilkdownEditor from './CrepeEditor.vue'
 import { ProsemirrorAdapterProvider } from '@prosemirror-adapter/vue'
 import { ref } from 'vue'
 const doc = defineModel({ type: String })
@@ -36,11 +36,12 @@ const emit = defineEmits(['save'])
 
 const editorRef = ref<InstanceType<typeof MilkdownEditor>>(null!)
 
+
 defineExpose({
   setValue: (md: string) => editorRef.value.setValue(md),
   getHtml: () => editorRef.value.getHtml(),
   getOutline: () => editorRef.value.getOutline(),
-  editorInstance: editorRef.value?.editorInstance
+  crepe: editorRef.value?.crepe
 })
 </script>
 

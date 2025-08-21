@@ -18,7 +18,6 @@ import '@mdi/font/css/materialdesignicons.css'
 
 // Milkdown Nord
 import '@milkdown/theme-nord/style.css'
-import '@/utils/markdown.css'
 
 import App from './App.vue'
 
