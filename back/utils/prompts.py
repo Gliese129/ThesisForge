@@ -27,7 +27,8 @@ If more information is needed:
     "Second follow-up question?"
   ],
   "suggestions": [
-    {"field": "fieldName", "suggestion": "improvement"}
+    {"field": "fieldName", "suggestion": "improvement"},
+    [optional] {"field": "existingNotes", "suggestion": "Based on the original notes and previous Q&A, summarize key points here to save tokens."}
   ]
 }
 
@@ -35,10 +36,14 @@ If all required information is present:
 {
   "status": "Outline confirmed",
   "questions": [],
-  "suggestions": []
+  "suggestions": [
+  [optional] {"field": "existingNotes", "suggestion": "Based on the original notes and previous Q&A, summarize key points here to save tokens."}
+  ]
 }
 
 Your response MUST be ONLY the JSON object, with no extra text or formatting. It must be parseable by Python's json.loads().
+FieldName can be any of: title, subjectArea, purpose, targetAudience, language, minWordCount, maxWordCount, requireReferences, includeFormulas, preferredTone, focusArea, avoidTopics, existingNotes, needAbstract.
+Also, summarize the previous Q&A to existing notes to save tokens.
 """
     return prompt.strip()
 
