@@ -148,7 +148,6 @@ watchDebounced(
 <style scoped>
 .editor-placeholder {
   border: 1px dashed #ccc;
-  padding: 1rem;
   border-radius: 4px;
   height: 70vh; /* Fixed height */
   width: 100%; /* Fixed width */

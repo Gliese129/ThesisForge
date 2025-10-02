@@ -374,11 +374,13 @@ const handleOutlineUpdate = async (apiPromise: Promise<any>) => {
   try {
     const res = await apiPromise
     if (res.additionalQuestions?.length) {
-      store.commit('article/addQuestions', res.additionalQuestions)
+      store.commit('article/setQuestions', res.additionalQuestions)
       store.commit(
         'message/info',
         `Added ${res.additionalQuestions.length} new question(s).`
       )
+    } else {
+      store.commit('article/setQuestions', [])
     }
     completed.value = res.completed || false
     handleSuggestionProcessing(res.suggestions || [])

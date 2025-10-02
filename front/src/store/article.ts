@@ -110,6 +110,13 @@ export const Article = {
         (q) => q.question !== questionToRemove
       )
     },
+    setQuestions(state: ArticleState, questions: string[]) {
+      state.additionalQuestions ??= []
+      state.additionalQuestions = questions.map((q) => ({
+        question: q,
+        answer: ''
+      }))
+    },
 
     // --- 管理文章结构的 Mutations ---
     setSections(state: ArticleState, sections: any[]) {
