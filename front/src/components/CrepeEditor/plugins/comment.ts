@@ -360,8 +360,7 @@ export const commentCaretHint = $prose(
 )
 
 /* ================== Bubble UI ================== */
-type Bubble = ReturnType<typeof createCommentBubble>
-
+// --- replace old createCommentBubble with this textarea version ---
 function createCommentBubble(view: EditorView) {
   const doc = view.dom.ownerDocument
   const el = doc.createElement('div')
@@ -385,19 +384,27 @@ function createCommentBubble(view: EditorView) {
   btnCopy.innerHTML = copySvg
   el.appendChild(btnCopy)
 
-  // center: input (shows comment)
-  const input = doc.createElement('input')
-  input.className = 'mdcmt-input'
-  Object.assign(input, { type: 'text', value: '' })
-  Object.assign(input.style, {
-    minWidth: '180px',
-    border: 'none',
+  // center: TEXTAREA (fixed width, up to 6 lines, scrollable)
+  const area = doc.createElement('textarea')
+  area.className = 'mdcmt-textarea'
+  area.value = ''
+  area.readOnly = false
+  Object.assign(area.style, {
+    width: '340px', // 固定宽度（按需改）
+    minHeight: '2.2em',
+    lineHeight: '1.4',
+    fontSize: '14px',
+    padding: '6px 8px',
+    borderRadius: '8px',
+    border: '1px solid #E5E7EB',
+    background: '#F9FAFB',
     outline: 'none',
-    background: 'transparent',
-    fontSize: '14px'
+    resize: 'none', // 禁止用户拖拽改尺寸
+    overflowY: 'auto', // 超 6 行滚动
+    color: '#111827'
   } as CSSStyleDeclaration)
-  input.disabled = true
-  el.appendChild(input)
+  area.rows = 2
+  el.appendChild(area)
 
   // right: edit + delete
   const btnEdit = doc.createElement('button')
@@ -415,26 +422,44 @@ function createCommentBubble(view: EditorView) {
   let anchorEl: HTMLElement | null = null
   let nodeStart = -1
   let editing = false
+  let beforeValue = ''
+
+  const MAX_LINES = 6
+  const LINE_PX = 20 // 近似行高（px）；如需更精准可改为从 getComputedStyle 读取
+  const V_PADDING = 12 // 上下 padding 之和（px）
+  const MAX_H = MAX_LINES * LINE_PX + V_PADDING
+
+  const autoFit = () => {
+    // 自适应高度，但不超过 MAX_H；超过则滚动
+    area.style.height = 'auto'
+    const h = Math.min(area.scrollHeight, MAX_H)
+    area.style.height = `${h}px`
+    area.style.overflowY = area.scrollHeight > h ? 'auto' : 'hidden'
+  }
 
   const show = (start: number, anchor: HTMLElement, comment: string) => {
     nodeStart = start
     anchorEl = anchor
-    input.value = comment ?? ''
+    // 如果未处于编辑，显示当前值；若正在编辑则保留当前输入
+    if (!editing) area.value = comment ?? ''
     el.style.display = 'flex'
+    autoFit()
     reposition()
   }
+
   const hide = () => {
     el.style.display = 'none'
     anchorEl = null
     nodeStart = -1
     if (editing) exitEdit(false)
   }
+
   const reposition = () => {
     if (!anchorEl || el.style.display === 'none') return
     const rect = anchorEl.getBoundingClientRect()
     const vw = doc.defaultView?.innerWidth ?? 0
     const margin = 8
-    // default above
+    // 默认置于上方，空间不足放下方
     let top = rect.top - el.offsetHeight - margin
     if (top < 0) top = rect.bottom + margin
     const left = Math.min(
@@ -443,6 +468,18 @@ function createCommentBubble(view: EditorView) {
     )
     el.style.top = `${top}px`
     el.style.left = `${left}px`
+  }
+
+  const beginEdit = () => {
+    editing = true
+    beforeValue = area.value
+    btnEdit.classList.add('is-editing')
+    area.disabled = false
+    autoFit()
+    area.focus()
+    // 将光标移动到末尾，不全选
+    const len = area.value.length
+    area.setSelectionRange(len, len)
   }
 
   const commitEdit = () => {
@@ -454,50 +491,66 @@ function createCommentBubble(view: EditorView) {
       const tr = viewState.tr.setNodeMarkup(
         nodeStart,
         type,
-        { ...node.attrs, comment: input.value },
+        { ...node.attrs, comment: area.value },
         node.marks
       )
       view.dispatch(tr)
     }
     exitEdit(true)
   }
+
   const exitEdit = (_committed: boolean) => {
     editing = false
-    input.disabled = true
+    area.disabled = true
     btnEdit.classList.remove('is-editing')
   }
 
-  // events
+  // ===== events =====
   btnCopy.addEventListener('click', async () => {
+    // 点击复制前，若在编辑中，先提交再复制，保持一致性
+    if (editing) commitEdit()
     try {
-      await navigator.clipboard.writeText(input.value)
+      await navigator.clipboard.writeText(area.value)
     } catch {}
   })
+
   btnEdit.addEventListener('click', () => {
+    if (!editing) beginEdit()
+    else commitEdit() // 第二次点击“完成编辑”
+  })
+
+  btnDel.addEventListener('click', () => {
+    if (nodeStart >= 0) unwrapComment(view, nodeStart)
+  })
+
+  // 进入编辑：获得焦点就认为开始编辑（用于统计/样式）
+  area.addEventListener('focus', () => {
     if (!editing) {
       editing = true
+      beforeValue = area.value
       btnEdit.classList.add('is-editing')
-      input.disabled = false
-      input.focus()
-      input.select()
-    } else {
-      commitEdit()
     }
   })
-  input.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') {
+
+  // 文本变化：自适应高度 + 重新定位
+  area.addEventListener('input', () => {
+    autoFit()
+    reposition()
+  })
+
+  // Enter 默认换行；不提交 —— 无需额外处理
+  // 提供 Esc 取消（可保留也可删掉）
+  area.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
       e.preventDefault()
-      commitEdit()
-    } else if (e.key === 'Escape') {
-      e.preventDefault()
+      area.value = beforeValue
       exitEdit(false)
     }
   })
-  input.addEventListener('blur', () => {
+
+  // 失焦自动保存
+  area.addEventListener('blur', () => {
     if (editing) commitEdit()
-  })
-  btnDel.addEventListener('click', () => {
-    if (nodeStart >= 0) unwrapComment(view, nodeStart)
   })
 
   const destroy = () => {
@@ -509,7 +562,11 @@ function createCommentBubble(view: EditorView) {
     hide,
     reposition,
     destroy,
-    setValue: (v: string) => (input.value = v)
+    beginEdit, // 供 toolbar 调用
+    setValue: (v: string) => {
+      area.value = v
+      autoFit()
+    }
   }
 }
 

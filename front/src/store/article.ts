@@ -18,6 +18,7 @@ export interface ArticleSection {
   note?: string
   content?: string
   comments?: Comment[] // 增加评论功能
+  summary?: string
 }
 
 /**
@@ -131,11 +132,14 @@ export const Article = {
     },
     updateSectionContent(
       state: ArticleState,
-      payload: { index: number; content: string }
+      payload: { index: number; content: string; summary?: string }
     ) {
       const { index, content } = payload
       if (index >= 0 && index < state.sections.length) {
         state.sections[index].content = content
+        if (payload.summary !== undefined) {
+          state.sections[index].summary = payload.summary
+        }
       }
     },
     /**

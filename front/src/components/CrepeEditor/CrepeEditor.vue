@@ -93,7 +93,7 @@ defineExpose({
 })
 </script>
 
-<style>
+<style lang="scss">
 /* tighten editor padding */
 #editor .ProseMirror {
   padding: 20px 80px !important;
@@ -101,25 +101,23 @@ defineExpose({
 }
 /* 链接风格文本 */
 .md-comment-link {
-  background: none;
+  background-color: #eff758;
   color: var(--md-comment-color, #1a73e8);
-  text-decoration: underline;
-  text-underline-offset: 2px;
-  text-decoration-thickness: 0.08em;
   cursor: pointer;
   transition:
     color 0.12s ease,
-    text-decoration-thickness 0.12s ease;
-}
-.md-comment-link:hover,
-.md-comment-link:focus {
-  color: var(--md-comment-color-hover, #0b63d1);
-}
+    box-shadow 0.12s ease;
 
-/* 光标在节点内部时的提示（由 Decoration 添加 .is-caret-in） */
-.md-comment-link.is-caret-in {
-  text-decoration-thickness: 0.12em;
-  box-shadow: inset 0 -1px 0 currentColor;
+  :hover,
+  :focus {
+    color: var(--md-comment-color-hover, #0b63d1);
+    box-shadow: inset 0 -0.12em 0 currentColor;
+  }
+
+  /* 光标在节点内部时的提示（由 Decoration 添加 .is-caret-in） */
+  .is-caret-in {
+    box-shadow: inset 0 -1px 0 currentColor;
+  }
 }
 
 /* 悬浮编辑条 */

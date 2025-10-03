@@ -28,9 +28,7 @@
         </v-stepper-window-item>
 
         <v-stepper-window-item :value="4">
-          <v-card flat title="Review">
-            <v-card-text>Review your final article here.</v-card-text>
-          </v-card>
+          <review-article />
         </v-stepper-window-item>
       </v-stepper-window>
 
@@ -58,6 +56,7 @@ import { key } from '@/store'
 import FillInfo from './FillInfo.vue'
 import DefineStructure from './DefineStructure.vue'
 import CompleteContent from './CompleteContent.vue'
+import ReviewArticle from './ReviewArticle.vue'
 
 const store = useStore(key)
 

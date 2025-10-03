@@ -76,12 +76,31 @@
       >
         <div class="d-flex justify-space-between align-center mb-4">
           <h2 class="text-h5">{{ selectedSection.title }}</h2>
+          <v-card>
+            <v-btn prepend-icon="mdi-content-copy" @click="contentCopyPrompt"
+              >Get Prompt</v-btn
+            >
+            <paste-ai-response
+              @send="
+                (text) =>
+                  handleContentUpdate(GenerateContentApi.generateManually(text))
+              "
+            />
+            <v-btn
+              color="primary"
+              prepend-icon="mdi-robot"
+              :loading="contentAskBtnLoading"
+              @click="contentAskAI"
+              >Ask AI</v-btn
+            >
+          </v-card>
         </div>
 
         <div class="editor-placeholder flex-grow-1 overflow-y-auto">
           <milkdown-editor-wrapper
             :key="selectedSectionIndex"
             v-model="currentMarkdown"
+            ref="editorRef"
           ></milkdown-editor-wrapper>
         </div>
       </v-card>
@@ -97,6 +116,8 @@ import type { ArticleSection } from '@/store/article'
 import MilkdownEditorWrapper from '@/components/CrepeEditor/CrepeEditorWrapper.vue'
 // @ts-ignore-next-line
 import { watchDebounced } from '@vueuse/core'
+import { GenerateContentApi } from '@/api/content'
+import PasteAiResponse from '@/components/PasteAIResponse.vue'
 
 const store = useStore(key)
 
@@ -112,6 +133,10 @@ const sections = computed<ArticleSection[]>({
 const selectedSectionIndex = ref<number>(0)
 const panel = ref<number[]>([]) // Keep this for v-expansion-panels
 const currentMarkdown = ref<string>('')
+const activeContentTab = ref<string>('prompt')
+const contentAskBtnLoading = ref<boolean>(false)
+
+const editorRef = ref<InstanceType<typeof MilkdownEditorWrapper>>(null!)
 
 const selectedSection = computed(() => {
   if (selectedSectionIndex.value === null) {
@@ -143,6 +168,61 @@ watchDebounced(
   },
   { debounce: 500, maxWait: 2000 } // 停止输入 500ms 后执行，但最长2秒内一定会执行一次
 )
+
+// --- Helpers to build payload like in DefineStructure.vue ---
+const buildApiPayload = () => {
+  const outlinePayload: any = { ...store.state.article }
+  delete outlinePayload.additionalQuestions
+  delete outlinePayload.sections
+  return {
+    outline: outlinePayload,
+    sections: sections.value.filter(
+      (s) => s.title && s.title.trim() !== 'Untitled Section'
+    ),
+    sectionId: selectedSectionIndex.value
+  }
+}
+
+const handleContentUpdate = async (apiPromise: Promise<any>) => {
+  contentAskBtnLoading.value = true
+  try {
+    const response = await apiPromise
+    if (response?.text) {
+      console.log(response)
+      store.dispatch('article/updateSectionContent', {
+        index: selectedSectionIndex.value,
+        content: response.text,
+        summary: response.summary
+      })
+
+      editorRef?.value.setValue(response.text)
+    }
+  } catch (error) {
+    store.commit('message/error', 'An error occurred while generating content.')
+    console.error(error)
+  } finally {
+    contentAskBtnLoading.value = false
+  }
+}
+
+const contentCopyPrompt = async () => {
+  try {
+    const data = await GenerateContentApi.getPrompt(buildApiPayload())
+    await navigator.clipboard.writeText(data.prompt || '')
+    store.commit('message/success', 'Prompt copied!')
+  } catch (error) {
+    store.commit('message/error', 'Failed to copy prompt')
+    console.error(error)
+  }
+}
+
+const contentAskAI = () => {
+  const payload = {
+    ...buildApiPayload(),
+    sectionId: selectedSectionIndex.value
+  }
+  handleContentUpdate(GenerateContentApi.generate(payload))
+}
 </script>
 
 <style scoped>
