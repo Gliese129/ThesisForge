@@ -57,3 +57,18 @@ def format_section_plans(sections: List[Section]) -> str:
         formatted_sections.append(section_info)
 
     return "\n".join(formatted_sections)
+
+def format_section_contents(sections: List[Section]) -> str:
+    if not sections:
+        return "No sections provided."
+
+    formatted_sections = []
+    for i, section in enumerate(sections):
+        content_preview = (section.content[:75] + '...') if section.content and len(section.content) > 75 else (section.content or 'None')
+        section_info = (f"{i+1}. {section.title} ({section.expected_word_count} words): \n "
+                        f"Description: {section.description} \n"
+                        f"Content Preview: {content_preview} \n"
+                        f"Summary: {section.summary or 'None'}")
+        formatted_sections.append(section_info)
+
+    return "\n".join(formatted_sections)

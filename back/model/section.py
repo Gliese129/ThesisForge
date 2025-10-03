@@ -12,6 +12,8 @@ class Section(BaseModel):
     description: str
     expected_word_count: Optional[int] = None
     note: Optional[str] = None
+    content: Optional[str] = None
+    summary: Optional[str] = None
 
     class Config:
         alias_generator = _to_camel

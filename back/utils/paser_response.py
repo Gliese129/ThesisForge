@@ -58,3 +58,22 @@ def parse_structure(text: str) -> Tuple[List[Section], str, bool]:
         if isinstance(item, dict):
             sections.append(Section(**item))
     return sections, qa_summary, completed
+
+def parse_section_content(text: str) -> Tuple[str, str]:
+    """
+    Extract the main content from the AI's response, removing any leading/trailing formatting.
+    """
+    text = clean_text(text)
+
+    # Split by the horizontal line `---` used to separate content and summary
+    parts = text.rsplit('---', 1)
+    if len(parts) != 2:
+        raise ValueError("Expected exactly one '---' to separate section content and summary.")
+    text, summary = parts[0].strip(), parts[1].strip()
+
+    if text.startswith("# Section Content"):
+        text = text[len("# Section Content"):].strip()
+    if summary.startswith("# Summary"):
+        summary = summary[len("# Summary"):].strip()
+
+    return text, summary
